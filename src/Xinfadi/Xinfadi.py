@@ -15,6 +15,43 @@ import codecs
 import os
 import pandas as pd 
 
+def get_file_size(file_to_handle):
+    " If the file exist, return number of records; otherwise create a new file, and write-in the header"
+
+    # Test whether the file exist
+    if os.path.exists(file_to_handle):
+        # df = pd.read_csv(csv_filename)
+        # RecNuminFile = len(df)  # 
+        # bottom = df.tail(1)
+        # close(df)
+        
+        #csv_file = file(csv_filename,'r')
+        with open(file_to_handle,'rb') as csv_file:
+            reader = csv.reader(csv_file)
+            Num_of_Rec = 0
+            # Cal the number of records in file
+            for eachline in reader:
+                if len(eachline) > 1:  # not empty line
+                    Num_of_Rec += 1  # 
+            # bottom = df.tail(1)
+            csv_file.close()
+            Num_of_Rec -= 1    # Decrease the header line
+            print 'Open file %s with %d records' %(file_to_handle, Num_of_Rec)
+    else:
+        # Create the file, and writein the header line
+        # csv_file = file(csv_filename, 'wb')
+        with open(file_to_handle, 'wb') as csv_file:
+            print 'Create file ' + file_to_handle
+            # Handle Chinese char in CSV file, f.write('\xEF\xBB\xBF') also works
+            csv_file.write(codecs.BOM_UTF8)             
+            csv_w = csv.writer(csv_file,dialect='excel')
+            csv_w.writerow(['品名', '最低价', '平均价','最高价','规格','单位','发布日期']) 
+            csv_file.close()   
+            Num_of_Rec = 0
+
+    return (Num_of_Rec)
+
+
 def get_xinfadi_price():
     "Access XinFaDi website, get new updated veg/fruit price, and append to the files."
 
@@ -35,37 +72,9 @@ def get_xinfadi_price():
             csv_filename = veg_filename
         else:
             csv_filename = fruit_filename 
-               
-        # Test whether the file exist
-        if os.path.exists(csv_filename):
-            # df = pd.read_csv(csv_filename)
-            # RecNuminFile = len(df)  # 
-            # bottom = df.tail(1)
-            # close(df)
-            
-            #csv_file = file(csv_filename,'r')
-            with open(csv_filename,'rb') as csv_file:
-                reader = csv.reader(csv_file)
-                RecNuminFile = 0
-                # Cal the number of records in file
-                for eachline in reader:
-                    if len(eachline) > 1:  # not empty line
-                        RecNuminFile += 1  # 
-                # bottom = df.tail(1)
-                csv_file.close()
-                RecNuminFile -= 1    # Decrease the header line
-                print 'Open file %s with %d records' %(csv_filename, RecNuminFile)
-        else:
-            # Create the file, and writein the header line
-            # csv_file = file(csv_filename, 'wb')
-            with open(csv_filename, 'wb') as csv_file:
-                print 'Create file ' + csv_filename
-                # Handle Chinese char in CSV file, f.write('\xEF\xBB\xBF') also works
-                csv_file.write(codecs.BOM_UTF8)             
-                csv_w = csv.writer(csv_file,dialect='excel')
-                csv_w.writerow(['品名', '最低价', '平均价','最高价','规格','单位','发布日期']) 
-                csv_file.close()   
-                RecNuminFile = 0
+        
+        # Test if the file exist, otherwise create new file       
+        RecNuminFile = get_file_size(csv_filename)
          
         url = "http://www.xinfadi.com.cn/marketanalysis/" + str(Veg_Fruit)+ "/list/1.shtml"
         page = urllib2.urlopen(url)
