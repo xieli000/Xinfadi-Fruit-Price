@@ -14,6 +14,9 @@ import csv
 import codecs 
 import os
 import pandas as pd 
+import socket
+import time
+
 
 def get_file_size(file_to_handle):
     " If the file exist, return number of records; otherwise create a new file, and write-in the header"
@@ -57,6 +60,7 @@ def get_xinfadi_price():
 
     veg_filename = 'XinFDVeg.csv'
     fruit_filename = 'XinFDFruit.csv'
+    sleeptime = 5
     
     pr = """Update file %s
     ----------------------------------------------------------------------------------
@@ -75,11 +79,24 @@ def get_xinfadi_price():
         
         # Test if the file exist, otherwise create new file       
         RecNuminFile = get_file_size(csv_filename)
-         
+        
         url = "http://www.xinfadi.com.cn/marketanalysis/" + str(Veg_Fruit)+ "/list/1.shtml"
-        page = urllib2.urlopen(url)
-        soup = BeautifulSoup(page,"html.parser")
-    
+        
+        while (True):  # while() to handle network problem, like socket.error[10054]
+            try: 
+                page = urllib2.urlopen(url)
+                soup = BeautifulSoup(page,"html.parser")
+            except socket.error, e:
+                if socket.error == 10054:
+                    print 'Connection refused by server %d! Sleep %d seconds, then try again....' %(e.errno, sleeptime)
+                    time.sleep(sleeptime)
+                    sleeptime += 5
+                    continue
+                else:
+                    print 'Network error, socket.error [%d]!' %e.errno
+                    sys.exit(1)
+            break
+        
         # Get the total number of pages from page footer, the 1st <em> body
         page_footer = soup.find_all("em")
         rec_total_txt = page_footer[1]
@@ -91,12 +108,18 @@ def get_xinfadi_price():
         
         # No need to get all records from website, just the update content from last time
         rec_to_handle = Rec_Total - RecNuminFile
-        page_no = int(round(rec_to_handle/20+1))
-        rows_remain_in_page = rec_to_handle%20
-        if rows_remain_in_page==0:
-            # Start from a full page, then page_no -1 
-            rows_remain_in_page = 20
-            page_no -= 1
+        if rec_to_handle == 0:  # no records to append
+            print pr %(csv_filename, rec_to_handle, Rec_Total)
+            continue        
+        
+        if (rec_to_handle%20 ==0) : 
+            # Start from a full page, page_no +1 because page_no start from 1 instead of 0
+            page_no = int(round(rec_to_handle/20))
+            rows_remain_in_page = 20         
+        else:
+            # Not from a full page, +1 for remain Recs in current page, +1 as page_no start from 1
+            page_no = int(round(rec_to_handle/20))+1 
+            rows_remain_in_page = rec_to_handle%20
  
         # Open CSV file to append new content
         # csv_file = open(csv_filename, 'ab')
@@ -109,8 +132,20 @@ def get_xinfadi_price():
                 # print 'Page number %d' %page_no
                 url = "http://www.xinfadi.com.cn/marketanalysis/"+str(Veg_Fruit)+"/list/"+str(page_no)+".shtml"
                 # print 'Get  ' + url
-                page = urllib2.urlopen(url)
-                soup = BeautifulSoup(page,"html.parser")
+                
+                try:   
+                    page = urllib2.urlopen(url)
+                    soup = BeautifulSoup(page,"html.parser")
+                except socket.error, e:  #handle socket.errno(10054), etc.
+                    if socket.error == 10054:
+                        print 'Connection refused by server %d! Sleep %d seconds, then try again....' %(e.errno, sleeptime)
+                        time.sleep(sleeptime)
+                        sleeptime += 5
+                        continue
+                    else:
+                        print 'Network error, socket.error [%d]!' %e.errno
+                        csv_file.close()
+                        sys.exit(1)
             
                 # Goto the price history table of page
                 table = soup.find("table", {"class":"hq_table"})
@@ -119,10 +154,10 @@ def get_xinfadi_price():
                 rows = table.find_all("tr")
                 # print '本%d表有 %d 行记录' %(Veg_Fruit,len(rows))       
                 
-                for row_pointer in range(rows_remain_in_page,0,-1): 
+                while (rows_remain_in_page): 
                     # Get the row from table in page one by one, with descending sequence， easy to append 
                     # new content to CSV file. The record is identified by row_no from table, and assemble to msg.  
-                    cells = rows[row_pointer].find_all("td")      
+                    cells = rows[rows_remain_in_page].find_all("td")
                     
                     msg = []
                     for i in range(0,7): 
@@ -131,6 +166,7 @@ def get_xinfadi_price():
                     #csv_file.write(codecs.BOM_UTF8)         
                     # print(msg)
                     csv_w.writerow(msg)
+                    rows_remain_in_page -= 1
                     continue
                  
                 # print 'Append %d records' %(Rows_Total_in_Page-row_no)    
